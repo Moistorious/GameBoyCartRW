@@ -1,24 +1,24 @@
 #include <Arduino.h>
 
-#define ADDRESS_REGISTER_CLEAR 9
-#define ADDRESS_REGISTER_CLOCK 10
-#define ADDRESS_REGISTER_LATCH 11
-#define ADDRESS_REGISTER_ENABLE 12
-#define ADDRESS_REGISTER_DATA 13
+#define ADDRESS_REGISTER_CLEAR 12
+#define ADDRESS_REGISTER_CLOCK 11
+#define ADDRESS_REGISTER_LATCH 10
+#define ADDRESS_REGISTER_ENABLE 9
+#define ADDRESS_REGISTER_DATA 8
 
-#define CART_CLOCK A0
-#define CART_WRITE_ENABLE A1
-#define CART_READ_ENABLE A2
-#define CART_CHIP_SELECT A3
+#define CART_CLOCK 7
+#define CART_WRITE_ENABLE 6
+#define CART_READ_ENABLE 5
+#define CART_CHIP_SELECT 4 // MREQ
 
-#define CART_DATA_0 8
-#define CART_DATA_1 7
-#define CART_DATA_2 6
-#define CART_DATA_3 5
-#define CART_DATA_4 4
-#define CART_DATA_5 3
-#define CART_DATA_6 2
-#define CART_DATA_7 A5
+#define CART_DATA_0 A0
+#define CART_DATA_1 A1
+#define CART_DATA_2 A2
+#define CART_DATA_3 A3
+#define CART_DATA_4 A4
+#define CART_DATA_5 A5
+#define CART_DATA_6 3
+#define CART_DATA_7 2
 // header: $$014F
 
 void setup()
@@ -50,6 +50,19 @@ void setup()
   digitalWrite(ADDRESS_REGISTER_LATCH, LOW);
   digitalWrite(ADDRESS_REGISTER_ENABLE, LOW);
   digitalWrite(ADDRESS_REGISTER_DATA, LOW);
+  ResetPins();
+  Serial.begin(9600);
+
+	while (!Serial) {
+		; // wait for serial port to connect. Needed for native USB
+	}
+}
+
+void ResetPins()
+{
+  digitalWrite(CART_CHIP_SELECT, HIGH);
+  digitalWrite(CART_READ_ENABLE, HIGH);
+  digitalWrite(CART_WRITE_ENABLE, HIGH);
 }
 
 bool read = true;
@@ -67,7 +80,7 @@ void SetCurrentAddress(int address)
 byte ReadByte(int address)
 {
   digitalWrite(CART_READ_ENABLE, LOW);
-  digitalWrite(CART_WRITE_ENABLE, HIGH);
+  digitalWrite(CART_CHIP_SELECT, LOW);
   byte currentByte = 0;
   SetCurrentAddress(address);
   bitWrite(currentByte, 0, digitalRead(CART_DATA_0));
@@ -78,6 +91,7 @@ byte ReadByte(int address)
   bitWrite(currentByte, 5, digitalRead(CART_DATA_5));
   bitWrite(currentByte, 6, digitalRead(CART_DATA_6));
   bitWrite(currentByte, 7, digitalRead(CART_DATA_7));
+  ResetPins();
   return currentByte;
 }
 
@@ -104,12 +118,13 @@ void WriteByte(int address, byte value)
   digitalWrite(CART_DATA_7, bitRead(value, 7));
 
   // Setup the address and data before we toggle the read/write pins instead of the other way around
-  digitalWrite(CART_READ_ENABLE, HIGH);
+  //digitalWrite(CART_READ_ENABLE, HIGH);
   digitalWrite(CART_WRITE_ENABLE, LOW);
-  delayMicroseconds(50);
-  digitalWrite(CART_READ_ENABLE, LOW);
+  delayMicroseconds(1);
+  //digitalWrite(CART_READ_ENABLE, LOW);
   digitalWrite(CART_WRITE_ENABLE, HIGH);
-
+  
+  delayMicroseconds(1);
   pinMode(CART_DATA_0, INPUT);
   pinMode(CART_DATA_1, INPUT);
   pinMode(CART_DATA_2, INPUT);
@@ -158,27 +173,40 @@ uint8_t nintendoLogo[] = {0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 
                           0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9, 0x99,
                           0xBB, 0xBB, 0x67, 0x63, 0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB, 0xB9, 0x33, 0x3E};
 
+void PrintHex8(uint8_t *data, uint8_t length) // prints 8-bit data in hex with leading zeroes
+{
+        Serial.print("0x"); 
+        for (int i=0; i<length; i++) { 
+          if (data[i]<0x10) {Serial.print("0");} 
+          Serial.print(data[i],HEX); 
+          Serial.print(" "); 
+        }
+}
+
 bool CheckNintendoLogo()
 {
-  // Nintendo Logo Check
+	// Nintendo Logo Check
 
-  uint8_t logoCheck = 1;
-  uint8_t x = 0;
-  for (uint16_t romAddress = 0x0104; romAddress <= 0x133; romAddress++)
-  {
-    if (nintendoLogo[x] != ReadByte(romAddress))
-    {
-      logoCheck = 0;
-      return false;
-    }
-    x++;
-  }
-  return true;
+	uint8_t logoCheck = 1;
+	uint8_t x = 0;
+	uint8_t by = 0;
+	for (uint16_t romAddress = 0x0104; romAddress <= 0x133; romAddress++)
+	{
+		by = ReadByte(romAddress);
+		if (nintendoLogo[x] != by)
+		{
+			logoCheck = 0;
+		}
+		x++;
+	}
+	if(logoCheck == 0){
+		return false;
+	}
+	return true;
 }
 
 void loop()
 {
-  String command;
 
   byte buffer[1024];
   byte cartridgeType = ReadByte(0x0147);
@@ -232,12 +260,12 @@ void loop()
   } // 8K RAM
 
   command = GetSerialCommand();
-  if (!CheckNintendoLogo())
-  {
-    Serial.println("READ ERROR");
-    while (true)
-      ;
-  }
+ 	if (!CheckNintendoLogo())
+	{
+		Serial.println("READ ERROR");
+		command = "";
+		return;
+	}
   if (command == "HEADER")
   {
     uint32_t sizo = HEADERSIZE;
@@ -247,8 +275,6 @@ void loop()
   }
   else if (command == "DUMPROM")
   {
-
-
     uint32_t RomSize = (uint32_t)romBanks * (uint32_t)(0x7FFF - 0x4000);
     Serial.write((byte *)&RomSize, 4);
 
