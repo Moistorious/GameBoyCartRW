@@ -38,13 +38,14 @@ namespace GameBoyDumperFrontend
             WriteBytes(address, new byte[] { value });
         }
 
-        public void WriteBytes(UInt16 address, byte[] data)
+        public void WriteBytes(UInt16 address, byte[] data, bool RAM = false)
         {
             byte[] output = new byte[4];
             int totalBytesRead = 0;
             SendCommand(new SerialCommand
             {
                 write = true,
+                writeRam = RAM,
                 address = address,
                 length = (byte)data.Length,
                 data = data
@@ -198,12 +199,23 @@ namespace GameBoyDumperFrontend
             return (Handshake)Enum.Parse(typeof(Handshake), handshake, true);
         }
 
+        public void Reset()
+        {
+            SendCommand(new SerialCommand
+            {
+                write = false,
+                reset = true,
+                address = 0,
+                length = 0
+            });
+        }
         public void SelectBank(byte cartType, byte bank)
         {
             SendCommand(new SerialCommand
             {
-                write = true,
-                address = 0xffff,
+                write = false,
+                selectBank = true,
+                address = 0,
                 length = 2,
                 data = new byte[] { cartType, bank }
             });

@@ -11,6 +11,12 @@ namespace GameBoyDumperFrontend
 {
     public class Cart
     {
+
+        public string Name;
+        public int RamSize;
+        public int FullRomSize;
+        public event EventHandler OnDataRead;
+
         const ushort HeaderAddress = 0x100;
         const ushort BankSize = 0x4000;
         const byte HeaderSize = 0x4f;
@@ -19,12 +25,11 @@ namespace GameBoyDumperFrontend
         ushort _romSize;
         ushort _romBanks;
         ushort _ramSize;
-        ushort _ramBanks;
-        ushort _ramEndAddress;
+        byte _ramBanks;
+        ushort _ramBankSize;
+        int _ramLength;
         ushort _address;
         ushort _bytesRead;
-        public uint FullRomSize;
-        public event EventHandler OnDataRead;
 
         public Cart(ISerial serial)
         {
@@ -77,15 +82,28 @@ namespace GameBoyDumperFrontend
             return _serial.ReadBytes(HeaderAddress, HeaderSize);
         }
 
-
-        public void ReadCurrentBank(ushort offset, ref byte[] buffer)
+        public void EnableRAM()
         {
+            byte temp = _serial.ReadByte(0x134); // Hack? needed?
+            if (_cartridgeType <= 4)
+            {
+                _serial.WriteByte(0x6000, 1); // RAM mode
+            }
 
+            _serial.WriteByte(0x0000, 0x0A); // MBC?
+
+            byte[] bytes = new byte[RamSize];
+
+        }
+
+        public void DisableRAM()
+        {
+            _serial.WriteByte(0x0000, 0x00);
         }
 
         public void ReadRange(ushort address, ushort length, int offset, ref byte[] buffer)
         {
-            ushort bytesRead = 0;
+            ushort bytesRead = 0; 
 
             while (bytesRead < length)
             {
@@ -116,27 +134,61 @@ namespace GameBoyDumperFrontend
             return bytes;
         }
 
-        public void Test()
+        public void WriteBytes(ushort address, byte[] buffer, bool RAM = false)
         {
-            byte[] bytes = new byte[5];
-            for (int i = 0; i < 1000; i += 2)
+            ushort bytesWritten = 0;
+
+            while (bytesWritten < buffer.Length)
             {
-                SelectBank(_cartridgeType, 2);
-                _serial.ReadBytes((ushort)(0x4134), 5).CopyTo(bytes, 0);
-                var name = Encoding.UTF8.GetString(bytes);
-                if (name == "ZEOTH")
-                {
-                    Console.WriteLine("Very sad");
-                }
-                else
-                {
+                byte bytesToWrite = (byte)Math.Min(255, buffer.Length- bytesWritten);
+                byte[] segment = buffer.Skip(bytesWritten).Take(bytesToWrite).ToArray();
 
-                    Console.WriteLine("WOO!");
-                }
+                _serial.WriteBytes((ushort)(address + bytesWritten),segment, RAM);
+
+                OnDataRead?.Invoke(this, new CartDataReadEventArgs() { totalBytesRead = bytesToWrite });
+
+                bytesWritten += bytesToWrite;
             }
-
         }
 
+        public void Reset()
+        {
+            _serial.Reset();
+        }
+
+        public void WriteRAM(byte[] buffer)
+        {
+            if (_ramBankSize == 0)
+            {
+                return;
+            }
+            EnableRAM();
+
+            for (byte currentBank = 0; currentBank < _ramBanks; currentBank++)
+            {
+                _serial.WriteByte(0x4000, currentBank);
+                byte[] bankData = buffer.Skip(currentBank * _ramBankSize).Take(_ramBankSize).ToArray();
+                WriteBytes(0xA000, bankData, true);
+            }
+            DisableRAM();
+            
+        }
+
+        public byte[] GetRAM()
+        {
+            if (_ramBankSize == 0) { 
+                return new byte[0];
+            }
+
+            byte[] bytes = new byte[RamSize];
+            EnableRAM();
+            for(byte currentBank = 0; currentBank < _ramBanks; currentBank++) {
+                _serial.WriteByte(0x4000, currentBank);
+                ReadRange(0xA000, _ramBankSize, _ramBankSize * currentBank, ref bytes);
+            }
+            DisableRAM();
+            return bytes;
+        }
 
         public void init()
         {
@@ -145,8 +197,11 @@ namespace GameBoyDumperFrontend
             _romBanks = 0;
             _ramSize = _serial.ReadByte(0x0149);
             _ramBanks = 0;
-            _ramEndAddress = 0;
+            _ramBankSize = 0;
             _romBanks = 2;
+            byte[] nameBytes = new byte[15];
+            _serial.ReadBytes((ushort)(0x0134), 15).CopyTo(nameBytes, 0);
+            Name = Encoding.UTF8.GetString(nameBytes).Trim('\0');
 
             if (_romSize > 0)
             {
@@ -178,18 +233,19 @@ namespace GameBoyDumperFrontend
             // RAM end address
             if (_cartridgeType == 6)
             {
-                _ramEndAddress = 0xA1FF;
+                _ramBankSize = 0x200;
             } // MBC2 512bytes (nibbles)
             if (_ramSize == 1)
             {
-                _ramEndAddress = 0xA7FF;
+                _ramBankSize = 0x800;
             } // 2K RAM
             if (_ramSize > 1)
             {
-                _ramEndAddress = 0xBFFF;
+                _ramBankSize = 0x2000;
             } // 8K RAM
 
-            FullRomSize = (uint)_romBanks * BankSize;
+            FullRomSize = _romBanks * BankSize;
+            RamSize = _ramBankSize * _ramBanks;
         }
 
     }

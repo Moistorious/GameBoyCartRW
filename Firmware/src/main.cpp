@@ -1,7 +1,7 @@
 #include <Arduino.h>
 
 #define CART_RESET 2
-//#define CART_AUDIO_IN 3
+// #define CART_AUDIO_IN 3
 #define CART_CHIP_SELECT 4
 #define CART_READ_ENABLE 5
 #define CART_WRITE_ENABLE 6
@@ -13,8 +13,7 @@
 #define ADDRESS_REGISTER_CLOCK 11
 #define ADDRESS_REGISTER_CLEAR 12
 
-
-#define CART_DATA_0 14 //A0 ...
+#define CART_DATA_0 14 // A0 ...
 #define CART_DATA_1 15
 #define CART_DATA_2 16
 #define CART_DATA_3 17
@@ -37,18 +36,20 @@ SerialCommand CurrentCommand;
 uint8_t serialBuffer[255];
 void GetSerialCommand()
 {
-        while (Serial.available() <= 0){/***/}
+    while (Serial.available() <= 0)
+    { /***/
+    }
 
-        Serial.readBytes((uint8_t*)&CurrentCommand, sizeof(SerialCommand) -2);
+    Serial.readBytes((uint8_t *)&CurrentCommand, sizeof(SerialCommand) - 2);
 
-        Serial.readBytes(CurrentCommand.data, CurrentCommand.length);
+    Serial.readBytes(CurrentCommand.data, CurrentCommand.length);
 }
 
 void setup()
 {
     Serial.begin(9600);
 
-    CurrentCommand.data = (uint8_t*)&serialBuffer;
+    CurrentCommand.data = (uint8_t *)&serialBuffer;
     // for board bodge
     pinMode(A6, INPUT);
     pinMode(A7, INPUT);
@@ -102,10 +103,10 @@ byte ReadByte(int address)
 {
     digitalWrite(CART_CHIP_SELECT, LOW);
     digitalWrite(CART_READ_ENABLE, LOW);
-    
+
     SetCurrentAddress(address);
     byte currentByte = 0;
-    //PD2 PD3
+    // PD2 PD3
 
     bitWrite(currentByte, 0, digitalRead(CART_DATA_0));
     bitWrite(currentByte, 1, digitalRead(CART_DATA_1));
@@ -143,6 +144,7 @@ void WriteByte(int address, byte value)
     digitalWrite(CART_DATA_7, bitRead(value, 7));
 
     digitalWrite(CART_WRITE_ENABLE, LOW);
+    delayMicroseconds(1);
     digitalWrite(CART_WRITE_ENABLE, HIGH);
 
     // TODO: use registers directly...
@@ -157,12 +159,16 @@ void WriteByte(int address, byte value)
     pinMode(CART_DATA_7, INPUT);
 }
 
+void WriteRAMByte(int address, byte value)
+{
+    digitalWrite(CART_CHIP_SELECT, LOW);
+    WriteByte(address, value);
+    delayMicroseconds(3);
+    digitalWrite(CART_CHIP_SELECT, HIGH);
+}
+
 void SelectBank(byte cartType, byte bank)
 {
-    
-    digitalWrite(CART_READ_ENABLE, HIGH);
-    digitalWrite(CART_CHIP_SELECT, HIGH);
-
     if (cartType >= 5)
     {                            // MBC2 and above
         WriteByte(0x2100, bank); // Set ROM bank
@@ -187,14 +193,39 @@ int Read(uint16_t startAddress, uint8_t *buffer, uint8_t length)
 void loop()
 {
     GetSerialCommand();
-    if(!CurrentCommand.write){      
+    if (CurrentCommand.write & 4){
+        digitalWrite(CART_RESET, LOW);
+        delayMicroseconds(10);
+        digitalWrite(CART_RESET, HIGH);
+        SetCurrentAddress(0);
+        digitalWrite(CART_CHIP_SELECT, HIGH);
+        digitalWrite(CART_WRITE_ENABLE, HIGH);
+        digitalWrite(CART_READ_ENABLE, HIGH);
+    }
+
+    if (CurrentCommand.write == 0)
+    {
         Read(CurrentCommand.address, serialBuffer, CurrentCommand.length);
         Serial.write(serialBuffer, CurrentCommand.length);
-    }else if(CurrentCommand.address == 0xFFFF){
+    }
+    
+    if (CurrentCommand.write & 8)
+    {
         SelectBank(CurrentCommand.data[0], CurrentCommand.data[1]);
-    }else{
-        for(int i=0; i < CurrentCommand.length; i++){
-            WriteByte(CurrentCommand.address, CurrentCommand.data[i]);
+    }
+    
+    if (CurrentCommand.write & 2)
+    {
+        for (int i = 0; i < CurrentCommand.length; i++)
+        {
+            WriteRAMByte(CurrentCommand.address + i, CurrentCommand.data[i]);
+        }
+        Serial.write("Done");
+    }else if(CurrentCommand.write & 1)
+    {
+        for (int i = 0; i < CurrentCommand.length; i++)
+        {
+            WriteByte(CurrentCommand.address + i, CurrentCommand.data[i]);
         }
         Serial.write("Done");
     }
