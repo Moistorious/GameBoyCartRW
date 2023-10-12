@@ -2,7 +2,7 @@
 
 namespace GameBoyDumperFrontend
 {
-    public interface ISerial
+    public interface ICartridgeCommunication
     {
         byte ReadByte(ushort address);
         byte[] ReadBytes(ushort address, byte length);

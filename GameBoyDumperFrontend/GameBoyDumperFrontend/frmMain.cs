@@ -1,32 +1,34 @@
 ﻿using System.ComponentModel;
+using System.IO.Ports;
 
 namespace GameBoyDumperFrontend
 {
-    public partial class Form1 : Form
+    public partial class frmMain : Form
     {
-        static Cart cart;
+        Cart cart;
+        CartSerial serial;
         BackgroundWorker worker;
 
-        public Form1()
+        public frmMain()
         {
             InitializeComponent();
             worker = new BackgroundWorker();
+            serial = new CartSerial();
 
             saveFileDialog1.ValidateNames = true;
             saveFileDialog1.OverwritePrompt = true;
-
-            cart = new Cart(new Serial("COM3"));
 
             worker.DoWork += Worker_DoWork;
             worker.ProgressChanged += Worker_ProgressChanged;
             worker.WorkerReportsProgress = true;
             worker.RunWorkerCompleted += Worker_RunWorkerCompleted;
+
         }
 
         private void Worker_RunWorkerCompleted(object? sender, RunWorkerCompletedEventArgs e)
         {
             cart.Reset();
-            if(e.Error != null)
+            if (e.Error != null)
             {
                 MessageBox.Show(e.Error.Message, "ERROR", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
@@ -47,74 +49,54 @@ namespace GameBoyDumperFrontend
 
         private void Worker_DoWork(object? sender, DoWorkEventArgs e)
         {
+            var args = e.Argument as workerArgs;
+            BackgroundWorker? worker = sender as BackgroundWorker;
+
             uint totalBytesRead = 0;
             int targetBytes = 0;
 
-            if (sender == null) { return; }
+            if (args == null || worker == null) { throw new ArgumentException("We need an operation to perform!"); }
 
-            BackgroundWorker worker = (BackgroundWorker)sender;
+            if (!cart.SanityCheck()) { throw new Exception("It's broken"); }
 
-            if (!SanityCheck())
-            {
-                throw new Exception("It's broken");
-            }
-            var args = (workerArgs)e.Argument;
-
-            void startProgress(int target)
-            {
-                cart.OnDataRead += Cart_OnDataRead;
-                totalBytesRead = 0;
-                targetBytes = target;
-            }
-
-            void stopProgress()
-            {
-                cart.OnDataRead -= Cart_OnDataRead;
-            }
-
-            void Cart_OnDataRead(object? sender, EventArgs e)
+            var onDataProcessed = new EventHandler((object? sender, EventArgs e) =>
             {
                 totalBytesRead += ((CartDataReadEventArgs)e).totalBytesRead;
-
                 worker.ReportProgress((int)Math.Floor(((double)totalBytesRead / targetBytes) * 100));
-            }
+            });
 
-            cart.init();
+            cart.OnDataProcessed += onDataProcessed;
+
+            totalBytesRead = 0;
             switch (args.targetOperation)
             {
                 case workerArgs.operation.readRam:
-                    startProgress(cart.RamSize);
+                    targetBytes = cart.RamSize;
                     File.WriteAllBytes(args.filename, cart.GetRAM());
-                    stopProgress();
                     break;
 
                 case workerArgs.operation.writeRam:
                     var ramBytes = File.ReadAllBytes(args.filename);
-                    startProgress(ramBytes.Length);
+                    targetBytes = ramBytes.Length;
                     cart.WriteRAM(ramBytes);
-                    stopProgress();
                     break;
 
                 case workerArgs.operation.readRom:
-                    startProgress(cart.FullRomSize);
+                    targetBytes = cart.FullRomSize;
                     File.WriteAllBytes(args.filename, cart.GetROM());
-                    stopProgress();
                     break;
             }
-
-        }
-
-        private bool SanityCheck()
-        {
-            return cart != null && cart.SanityCheck();
+            cart.OnDataProcessed -= onDataProcessed;
         }
 
         private void btn_WriteRam_Click(object sender, EventArgs e)
         {
-            toggleButtons(false);
-
+            openFileDialog1.FileName = $"{cart.Header.Title}.sav";
             if (openFileDialog1.ShowDialog() == DialogResult.OK)
             {
+
+                toggleButtons(false);
+
                 worker.RunWorkerAsync(new workerArgs
                 {
                     targetOperation = workerArgs.operation.writeRam,
@@ -125,6 +107,21 @@ namespace GameBoyDumperFrontend
 
         private void btn_ReadRom_Click(object sender, EventArgs e)
         {
+            var extension = String.Empty;
+
+            switch (cart.CartridgeType)
+            {
+                case Cart.CartType.GBC:
+                case Cart.CartType.GBC_Backwards_Compatible:
+                    extension = "gbc";
+                    break;
+                default:
+                    extension = "gb";
+                    break;
+            }
+
+            saveFileDialog1.FileName = $"{cart.Header.Title}.{extension}";
+
             if (saveFileDialog1.ShowDialog() == DialogResult.OK)
             {
                 toggleButtons(false);
@@ -138,8 +135,12 @@ namespace GameBoyDumperFrontend
 
         private void btn_ReadRam_Click(object sender, EventArgs e)
         {
+
+            saveFileDialog1.FileName = $"{cart.Header.Title}.sav";
+
             if (saveFileDialog1.ShowDialog() == DialogResult.OK)
             {
+
                 toggleButtons(false);
                 worker.RunWorkerAsync(new workerArgs
                 {
@@ -159,6 +160,55 @@ namespace GameBoyDumperFrontend
             }
             public operation targetOperation;
             public string filename = "";
+        }
+
+
+        private void btn_Refresh_Click(object sender, EventArgs e)
+        {
+            // Don't display COM 1
+            cboComPort.DataSource = (SerialPort.GetPortNames().Skip(1)).ToList();
+        }
+
+        private void frmMain_Load(object sender, EventArgs e)
+        {
+            btn_Refresh_Click(sender, e);
+            cboBaud.SelectedIndex = 0;
+        }
+
+        private void btn_Close_Click(object sender, EventArgs e)
+        {
+            cart.Reset();
+            txtCartName.Text = String.Empty;
+            serial.CloseConnection();
+
+            btn_Refresh.Enabled = true;
+            cboBaud.Enabled = true;
+            cboComPort.Enabled = true;
+            btn_Close.Enabled = false;
+            btn_Init.Enabled = true;
+
+            toggleButtons(false);
+        }
+        private void btn_Init_Click(object sender, EventArgs e)
+        {
+            serial.SetPortName(cboComPort.Text);
+            serial.SetBaudRate(int.Parse(cboBaud.Text));
+            serial.OpenConnection();
+
+            cart = new Cart(serial);
+
+            cart.init();
+
+            txtCartName.Text = cart.Header.Title;
+
+            btn_Refresh.Enabled = false;
+            cboBaud.Enabled = false;
+            cboComPort.Enabled = false;
+            btn_Close.Enabled = true;
+            btn_Init.Enabled = false;
+
+            toggleButtons(true);
+
         }
     }
 }
