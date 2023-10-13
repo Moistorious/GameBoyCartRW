@@ -61,7 +61,7 @@ namespace GameBoyDumperFrontend
 
             var onDataProcessed = new EventHandler((object? sender, EventArgs e) =>
             {
-                totalBytesRead += ((CartDataReadEventArgs)e).totalBytesRead;
+                totalBytesRead += ((CartDataEventArgs)e).ProcessedBytes;
                 worker.ReportProgress((int)Math.Floor(((double)totalBytesRead / targetBytes) * 100));
             });
 
@@ -109,7 +109,7 @@ namespace GameBoyDumperFrontend
         {
             var extension = String.Empty;
 
-            switch (cart.CartridgeType)
+            switch (cart.GbcType)
             {
                 case Cart.CartType.GBC:
                 case Cart.CartType.GBC_Backwards_Compatible:

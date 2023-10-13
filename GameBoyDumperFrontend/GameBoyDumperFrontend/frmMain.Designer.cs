@@ -45,10 +45,9 @@
             // btn_ReadRam
             // 
             btn_ReadRam.Enabled = false;
-            btn_ReadRam.Location = new Point(52, 132);
-            btn_ReadRam.Margin = new Padding(3, 2, 3, 2);
+            btn_ReadRam.Location = new Point(59, 176);
             btn_ReadRam.Name = "btn_ReadRam";
-            btn_ReadRam.Size = new Size(82, 22);
+            btn_ReadRam.Size = new Size(94, 29);
             btn_ReadRam.TabIndex = 0;
             btn_ReadRam.Text = "Read RAM";
             btn_ReadRam.UseVisualStyleBackColor = true;
@@ -57,10 +56,9 @@
             // btn_ReadRom
             // 
             btn_ReadRom.Enabled = false;
-            btn_ReadRom.Location = new Point(271, 132);
-            btn_ReadRom.Margin = new Padding(3, 2, 3, 2);
+            btn_ReadRom.Location = new Point(310, 176);
             btn_ReadRom.Name = "btn_ReadRom";
-            btn_ReadRom.Size = new Size(82, 22);
+            btn_ReadRom.Size = new Size(94, 29);
             btn_ReadRom.TabIndex = 1;
             btn_ReadRom.Text = "Read ROM";
             btn_ReadRom.UseVisualStyleBackColor = true;
@@ -69,10 +67,9 @@
             // btn_WriteRam
             // 
             btn_WriteRam.Enabled = false;
-            btn_WriteRam.Location = new Point(161, 132);
-            btn_WriteRam.Margin = new Padding(3, 2, 3, 2);
+            btn_WriteRam.Location = new Point(184, 176);
             btn_WriteRam.Name = "btn_WriteRam";
-            btn_WriteRam.Size = new Size(82, 22);
+            btn_WriteRam.Size = new Size(94, 29);
             btn_WriteRam.TabIndex = 2;
             btn_WriteRam.Text = "Write RAM";
             btn_WriteRam.UseVisualStyleBackColor = true;
@@ -80,10 +77,9 @@
             // 
             // progressBar1
             // 
-            progressBar1.Location = new Point(52, 70);
-            progressBar1.Margin = new Padding(3, 2, 3, 2);
+            progressBar1.Location = new Point(59, 93);
             progressBar1.Name = "progressBar1";
-            progressBar1.Size = new Size(301, 22);
+            progressBar1.Size = new Size(344, 29);
             progressBar1.TabIndex = 3;
             // 
             // openFileDialog1
@@ -93,9 +89,10 @@
             // 
             // btn_Init
             // 
-            btn_Init.Location = new Point(311, 97);
+            btn_Init.Location = new Point(355, 129);
+            btn_Init.Margin = new Padding(3, 4, 3, 4);
             btn_Init.Name = "btn_Init";
-            btn_Init.Size = new Size(75, 23);
+            btn_Init.Size = new Size(86, 31);
             btn_Init.TabIndex = 4;
             btn_Init.Text = "Init Cart";
             btn_Init.UseVisualStyleBackColor = true;
@@ -103,25 +100,29 @@
             // 
             // txtCartName
             // 
-            txtCartName.Location = new Point(52, 32);
+            txtCartName.Location = new Point(59, 43);
+            txtCartName.Margin = new Padding(3, 4, 3, 4);
             txtCartName.Name = "txtCartName";
             txtCartName.ReadOnly = true;
-            txtCartName.Size = new Size(301, 23);
+            txtCartName.Size = new Size(343, 27);
             txtCartName.TabIndex = 5;
+            txtCartName.TextAlign = HorizontalAlignment.Center;
             // 
             // cboComPort
             // 
             cboComPort.FormattingEnabled = true;
-            cboComPort.Location = new Point(52, 97);
+            cboComPort.Location = new Point(59, 129);
+            cboComPort.Margin = new Padding(3, 4, 3, 4);
             cboComPort.Name = "cboComPort";
-            cboComPort.Size = new Size(121, 23);
+            cboComPort.Size = new Size(138, 28);
             cboComPort.TabIndex = 6;
             // 
             // btn_Refresh
             // 
-            btn_Refresh.Location = new Point(179, 97);
+            btn_Refresh.Location = new Point(205, 129);
+            btn_Refresh.Margin = new Padding(3, 4, 3, 4);
             btn_Refresh.Name = "btn_Refresh";
-            btn_Refresh.Size = new Size(21, 23);
+            btn_Refresh.Size = new Size(24, 31);
             btn_Refresh.TabIndex = 7;
             btn_Refresh.Text = "⟳";
             btn_Refresh.UseVisualStyleBackColor = true;
@@ -130,9 +131,10 @@
             // btn_Close
             // 
             btn_Close.Enabled = false;
-            btn_Close.Location = new Point(392, 97);
+            btn_Close.Location = new Point(448, 129);
+            btn_Close.Margin = new Padding(3, 4, 3, 4);
             btn_Close.Name = "btn_Close";
-            btn_Close.Size = new Size(75, 23);
+            btn_Close.Size = new Size(86, 31);
             btn_Close.TabIndex = 8;
             btn_Close.Text = "Close";
             btn_Close.UseVisualStyleBackColor = true;
@@ -142,16 +144,17 @@
             // 
             cboBaud.FormattingEnabled = true;
             cboBaud.Items.AddRange(new object[] { "9600", "19200", "115200" });
-            cboBaud.Location = new Point(206, 98);
+            cboBaud.Location = new Point(235, 131);
+            cboBaud.Margin = new Padding(3, 4, 3, 4);
             cboBaud.Name = "cboBaud";
-            cboBaud.Size = new Size(79, 23);
+            cboBaud.Size = new Size(90, 28);
             cboBaud.TabIndex = 9;
             // 
             // frmMain
             // 
-            AutoScaleDimensions = new SizeF(7F, 15F);
+            AutoScaleDimensions = new SizeF(8F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(692, 259);
+            ClientSize = new Size(791, 345);
             Controls.Add(cboBaud);
             Controls.Add(btn_Close);
             Controls.Add(btn_Refresh);
@@ -162,7 +165,6 @@
             Controls.Add(btn_WriteRam);
             Controls.Add(btn_ReadRom);
             Controls.Add(btn_ReadRam);
-            Margin = new Padding(3, 2, 3, 2);
             Name = "frmMain";
             Text = "Moist Cart Read";
             Load += frmMain_Load;

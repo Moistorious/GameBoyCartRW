@@ -1,6 +1,8 @@
 ﻿using GameBoyDumperFrontend.CartClasses;
+using GameBoyDumperFrontend.Interface;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.IO.Ports;
 using System.Linq;
 using System.Net;
@@ -8,6 +10,7 @@ using System.Reflection.PortableExecutable;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement.Rebar;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement.TextBox;
 
@@ -15,28 +18,28 @@ namespace GameBoyDumperFrontend
 {
     public class Cart
     {
+
+        const ushort HeaderAddress = 0x100;
+        const ushort BankSize = 0x4000;
         public enum CartType
         {
             GB,
             GBC_Backwards_Compatible,
             GBC
         }
-        
-        const ushort HeaderAddress = 0x100;
-        const ushort BankSize = 0x4000;
+        public ushort RomBanks;
+        public byte RamBanks;
+        public ushort RamBankSize;
 
         public CartHeader Header;
-        public CartType CartridgeType;
+        public CartType GbcType;
         public int RamSize;
         public int FullRomSize;
         public event EventHandler? OnDataProcessed;
 
         ICartridgeCommunication _cartCommunication;
 
-        ushort _romBanks;
-        private byte[] _headerBytes;
-        byte _ramBanks;
-        ushort _ramBankSize;
+        private byte[]? _headerBytes;
 
         public Cart(ICartridgeCommunication cartCommunication)
         {
@@ -67,25 +70,6 @@ namespace GameBoyDumperFrontend
             return BinarySerialization.FromByteArray<CartHeader>(_headerBytes);
         }
 
-        void SelectBankOld(byte cartType, byte bank)
-        {
-            if (cartType >= 5)
-            {                          // MBC2 and above
-                _cartCommunication.WriteByte(0x2100, bank); // Set ROM bank
-            }
-            else
-            {
-                _cartCommunication.WriteByte(0x6000, 0);           // Set ROM Mode
-                _cartCommunication.WriteByte(0x4000, (byte)(bank >> 5));   // Set bits 5 & 6 (01100000) of ROM bank
-                _cartCommunication.WriteByte(0x2000, (byte)(bank & 0x1F)); // Set bits 0 & 4 (00011111) of ROM bank
-            }
-        }
-
-        void SelectBank(byte cartType, byte bank)
-        {
-            _cartCommunication.SelectBank(cartType, bank);
-        }
-
         public void EnableRAM()
         {
             byte temp = _cartCommunication.ReadByte(0x134); // Hack? needed?
@@ -107,7 +91,7 @@ namespace GameBoyDumperFrontend
 
         public void ReadRange(ushort address, ushort length, int offset, ref byte[] buffer)
         {
-            ushort bytesRead = 0; 
+            ushort bytesRead = 0;
 
             while (bytesRead < length)
             {
@@ -116,7 +100,7 @@ namespace GameBoyDumperFrontend
 
                 _cartCommunication.ReadBytes((ushort)(address + bytesRead), bytesToRead).CopyTo(buffer, bufferOffset);
 
-                OnDataProcessed?.Invoke(this, new CartDataReadEventArgs() { totalBytesRead = bytesToRead });
+                OnDataProcessed?.Invoke(this, new CartDataEventArgs() { ProcessedBytes = bytesToRead });
 
                 bytesRead += bytesToRead;
             }
@@ -129,9 +113,9 @@ namespace GameBoyDumperFrontend
             byte[] bytes = new byte[FullRomSize];
             ReadRange(0, BankSize, 0, ref bytes);
 
-            for (byte bank = 1; bank < _romBanks; bank++)
+            for (byte bank = 1; bank < RomBanks; bank++)
             {
-                SelectBank(Header.CartridgeType, bank);
+                _cartCommunication.SelectBank(Header.CartridgeType, bank);
 
                 ReadRange((ushort)0x4000, BankSize, ((int)BankSize) * bank, ref bytes);
             }
@@ -144,12 +128,12 @@ namespace GameBoyDumperFrontend
 
             while (bytesWritten < buffer.Length)
             {
-                byte bytesToWrite = (byte)Math.Min(255, buffer.Length- bytesWritten);
+                byte bytesToWrite = (byte)Math.Min(255, buffer.Length - bytesWritten);
                 byte[] segment = buffer.Skip(bytesWritten).Take(bytesToWrite).ToArray();
 
-                _cartCommunication.WriteBytes((ushort)(address + bytesWritten),segment, RAM);
+                _cartCommunication.WriteBytes((ushort)(address + bytesWritten), segment, RAM);
 
-                OnDataProcessed?.Invoke(this, new CartDataReadEventArgs() { totalBytesRead = bytesToWrite });
+                OnDataProcessed?.Invoke(this, new CartDataEventArgs() { ProcessedBytes = bytesToWrite });
 
                 bytesWritten += bytesToWrite;
             }
@@ -162,33 +146,35 @@ namespace GameBoyDumperFrontend
 
         public void WriteRAM(byte[] buffer)
         {
-            if (_ramBankSize == 0)
+            if (RamBankSize == 0)
             {
                 return;
             }
             EnableRAM();
 
-            for (byte currentBank = 0; currentBank < _ramBanks; currentBank++)
+            for (byte currentBank = 0; currentBank < RamBanks; currentBank++)
             {
                 _cartCommunication.WriteByte(0x4000, currentBank);
-                byte[] bankData = buffer.Skip(currentBank * _ramBankSize).Take(_ramBankSize).ToArray();
+                byte[] bankData = buffer.Skip(currentBank * RamBankSize).Take(RamBankSize).ToArray();
                 WriteBytes(0xA000, bankData, true);
             }
             DisableRAM();
-            
+
         }
 
         public byte[] GetRAM()
         {
-            if (_ramBankSize == 0) { 
+            if (RamBankSize == 0)
+            {
                 return new byte[0];
             }
 
             byte[] bytes = new byte[RamSize];
             EnableRAM();
-            for(byte currentBank = 0; currentBank < _ramBanks; currentBank++) {
+            for (byte currentBank = 0; currentBank < RamBanks; currentBank++)
+            {
                 _cartCommunication.WriteByte(0x4000, currentBank);
-                ReadRange(0xA000, _ramBankSize, _ramBankSize * currentBank, ref bytes);
+                ReadRange(0xA000, RamBankSize, RamBankSize * currentBank, ref bytes);
             }
             DisableRAM();
             return bytes;
@@ -196,74 +182,90 @@ namespace GameBoyDumperFrontend
 
         public void init()
         {
-            Header = GetHeader();
+            RomBanks = 0; RamBanks = 0; RamBankSize = 0; RomBanks = 0;
 
-            var gbcType = _headerBytes[0x143];
+            Header = GetHeader();
+            if (_headerBytes == null)
+            {
+                throw new ApplicationException("Header Bytes is null!");
+            }
+
+            // header starts at 0x100, so to get 0x143, we'll just read it 0x43
+            GbcType = GetCartType(_headerBytes[0x43]);
+            
+            RamBanks = GetRamBanks(Header.RamSize, Header.CartridgeType);
+            RamBankSize = GetRamBankSize(Header.RamSize, Header.CartridgeType);
+            RomBanks = GetRomBanks(Header.RomSize);
+
+            FullRomSize = RomBanks * BankSize;
+            RamSize = RamBankSize * RamBanks;
+        }
+
+        private CartType GetCartType(byte gbcType)
+        {
             switch (gbcType)
             {
                 case 0x80:
-                    CartridgeType = CartType.GBC_Backwards_Compatible; break;
-
+                    return CartType.GBC_Backwards_Compatible;
                 case 0xC0:
-                    CartridgeType = CartType.GBC; break;
-
+                    return CartType.GBC;
                 default:
-                    CartridgeType = CartType.GB; break;
+                    return CartType.GB;
             }
+        }
 
-            _romBanks = 0;
-            _ramBanks = 0;
-            _ramBankSize = 0;
-            _romBanks = 2;
-            
-            if (Header.RomSize > 0)
+        private ushort GetRamBankSize(byte ramSize, byte cartridgeType)
+        {
+            ushort ramBankSize = 0;
+            if (cartridgeType == 6)
             {
-                _romBanks = (ushort)(2 << Header.RomSize);
-            }
+                ramBankSize = 0x200;
+            } 
+            if (ramSize == 1)
+            {
+                ramBankSize = 0x800;
+            } 
+            if (ramSize > 1)
+            {
+                ramBankSize = 0x2000;
+            } 
+            return ramBankSize;
+        }
 
-            // RAM banks
-            _ramBanks = 0; // Default 0K RAM
-            if (Header.CartridgeType == 6)
+        private ushort GetRomBanks(byte romSize) {
+            return romSize > 0 ? (ushort) (2 << romSize) : (ushort) 2;
+        }
+
+        private byte GetRamBanks(byte ramSize, byte cartridgeType)
+        {
+            byte ramBanks = 0;
+
+            if (cartridgeType == 6)
             {
-                _ramBanks = 1;
+                ramBanks = 1;
             }
-            switch (Header.RamSize)
+            switch (ramSize)
             {
                 case 2:
-                    _ramBanks = 1;
+                    ramBanks = 1;
                     break;
                 case 3:
-                    _ramBanks = 4;
+                    ramBanks = 4;
                     break;
                 case 4:
-                    _ramBanks = 16;
+                    ramBanks = 16;
                     break;
                 case 5:
-                    _ramBanks = 8;
+                    ramBanks = 8;
                     break;
             }
-
-            // RAM end address
-            if (Header.CartridgeType == 6)
-            {
-                _ramBankSize = 0x200;
-            } // MBC2 512bytes (nibbles)
-            if (Header.RamSize == 1)
-            {
-                _ramBankSize = 0x800;
-            } // 2K RAM
-            if (Header.RamSize > 1)
-            {
-                _ramBankSize = 0x2000;
-            } // 8K RAM
-
-            FullRomSize = _romBanks * BankSize;
-            RamSize = _ramBankSize * _ramBanks;
+            return ramBanks;
         }
 
     }
-    class CartDataReadEventArgs : EventArgs
+
+    class CartDataEventArgs : EventArgs
     {
-        public uint totalBytesRead = 0;
+        public uint ProcessedBytes = 0;
     }
 }

@@ -1,6 +1,6 @@
 ﻿using System.IO.Ports;
 
-namespace GameBoyDumperFrontend
+namespace GameBoyDumperFrontend.Interface
 {
     public interface ICartridgeCommunication
     {
