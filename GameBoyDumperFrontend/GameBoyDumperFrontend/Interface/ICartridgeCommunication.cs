@@ -10,5 +10,9 @@ namespace GameBoyDumperFrontend.Interface
         void WriteBytes(ushort address, byte[] data, bool RAM = false);
         public void SelectBank(byte cartType, byte bank);
         void Reset();
+        byte[] GetHeader();
+        void GetROM(byte[] buffer);
+        void Init();
+        void GetRAM(byte[] buffer);
     }
 }

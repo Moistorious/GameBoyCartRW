@@ -1,55 +1,44 @@
 #include <Arduino.h>
 
-#define CART_RESET 2
-// #define CART_AUDIO_IN 3
-#define CART_CHIP_SELECT 4
-#define CART_READ_ENABLE 5
-#define CART_WRITE_ENABLE 6
-#define CART_CLOCK 7
+#include "SerialCommand.h"
+#include "CartReader.h"
 
-#define ADDRESS_REGISTER_DATA 8
-#define ADDRESS_REGISTER_ENABLE 9
-#define ADDRESS_REGISTER_LATCH 10
-#define ADDRESS_REGISTER_CLOCK 11
-#define ADDRESS_REGISTER_CLEAR 12
+#define BAUD_RATE 115200
+#define BUFFER_SIZE 1024
+// #define DEBUG_ENABLE
+#ifdef DEBUG_ENABLE
+#include <app_api.h>
+#include <avr8-stub.h>
+#endif
 
-#define CART_DATA_0 14 // A0 ...
-#define CART_DATA_1 15
-#define CART_DATA_2 16
-#define CART_DATA_3 17
-#define CART_DATA_4 18
-#define CART_DATA_5 19 // A5
-#define CART_DATA_6 3
-#define CART_DATA_7 13
+uint8_t serialBuffer[BUFFER_SIZE];
 
 void SetCurrentAddress(int address);
-struct SerialCommand
-{
-    uint8_t write;
-    uint16_t address;
-    uint8_t length;
-    uint8_t *data;
-};
 
 SerialCommand CurrentCommand;
+CartReader Cart;
 
-uint8_t serialBuffer[255];
 void GetSerialCommand()
 {
+
+#ifdef DEBUG_ENABLE
+    CurrentCommand = {
+        CommandType::GetFullROM,
+        0x0000,
+        0x0000};
+#else
     while (Serial.available() <= 0)
-    { /***/
+    {
     }
 
-    Serial.readBytes((uint8_t *)&CurrentCommand, sizeof(SerialCommand) - 2);
+    Serial.readBytes((uint8_t *)&CurrentCommand, sizeof(SerialCommand));
 
-    Serial.readBytes(CurrentCommand.data, CurrentCommand.length);
+    Serial.readBytes(serialBuffer, CurrentCommand.length);
+#endif
 }
 
 void setup()
 {
-    Serial.begin(9600);
-
-    CurrentCommand.data = (uint8_t *)&serialBuffer;
     // for board bodge
     pinMode(A6, INPUT);
     pinMode(A7, INPUT);
@@ -81,152 +70,135 @@ void setup()
     digitalWrite(ADDRESS_REGISTER_LATCH, LOW);
     digitalWrite(ADDRESS_REGISTER_ENABLE, LOW);
     digitalWrite(ADDRESS_REGISTER_DATA, LOW);
-    Serial.begin(9600);
 
+    Serial.begin(BAUD_RATE);
     while (!Serial)
     {
         ; // wait for serial port to connect. Needed for native USB
     }
 }
 
-bool read = true;
-
-void SetCurrentAddress(int address)
+void ReadBytesToSerial(uint16_t address, uint16_t length)
 {
-    digitalWrite(ADDRESS_REGISTER_LATCH, LOW);
-    shiftOut(ADDRESS_REGISTER_DATA, ADDRESS_REGISTER_CLOCK, MSBFIRST, (address >> 8));
-    shiftOut(ADDRESS_REGISTER_DATA, ADDRESS_REGISTER_CLOCK, MSBFIRST, (address & 0xFF));
-    digitalWrite(ADDRESS_REGISTER_LATCH, HIGH);
-}
-
-byte ReadByte(int address)
-{
-    digitalWrite(CART_CHIP_SELECT, LOW);
-    digitalWrite(CART_READ_ENABLE, LOW);
-
-    SetCurrentAddress(address);
-    byte currentByte = 0;
-    // PD2 PD3
-
-    bitWrite(currentByte, 0, digitalRead(CART_DATA_0));
-    bitWrite(currentByte, 1, digitalRead(CART_DATA_1));
-    bitWrite(currentByte, 2, digitalRead(CART_DATA_2));
-    bitWrite(currentByte, 3, digitalRead(CART_DATA_3));
-    bitWrite(currentByte, 4, digitalRead(CART_DATA_4));
-    bitWrite(currentByte, 5, digitalRead(CART_DATA_5));
-    bitWrite(currentByte, 6, digitalRead(CART_DATA_6));
-    bitWrite(currentByte, 7, digitalRead(CART_DATA_7));
-
-    digitalWrite(CART_READ_ENABLE, HIGH);
-    digitalWrite(CART_CHIP_SELECT, HIGH);
-
-    return currentByte;
-}
-
-void WriteByte(int address, byte value)
-{
-    // TODO: use registers directly...
-    pinMode(CART_DATA_0, OUTPUT);
-    pinMode(CART_DATA_1, OUTPUT);
-    pinMode(CART_DATA_2, OUTPUT);
-    pinMode(CART_DATA_3, OUTPUT);
-    pinMode(CART_DATA_4, OUTPUT);
-    pinMode(CART_DATA_5, OUTPUT);
-    pinMode(CART_DATA_6, OUTPUT);
-    pinMode(CART_DATA_7, OUTPUT);
-
-    SetCurrentAddress(address);
-
-    // Write out data (excluding highest 2 bits)
-    PORTC |= value & 0b00111111;
-
-    digitalWrite(CART_DATA_6, bitRead(value, 6));
-    digitalWrite(CART_DATA_7, bitRead(value, 7));
-
-    digitalWrite(CART_WRITE_ENABLE, LOW);
-    delayMicroseconds(1);
-    digitalWrite(CART_WRITE_ENABLE, HIGH);
-
-    // TODO: use registers directly...
-
-    pinMode(CART_DATA_0, INPUT);
-    pinMode(CART_DATA_1, INPUT);
-    pinMode(CART_DATA_2, INPUT);
-    pinMode(CART_DATA_3, INPUT);
-    pinMode(CART_DATA_4, INPUT);
-    pinMode(CART_DATA_5, INPUT);
-    pinMode(CART_DATA_6, INPUT);
-    pinMode(CART_DATA_7, INPUT);
-}
-
-void WriteRAMByte(int address, byte value)
-{
-    digitalWrite(CART_CHIP_SELECT, LOW);
-    WriteByte(address, value);
-    delayMicroseconds(3);
-    digitalWrite(CART_CHIP_SELECT, HIGH);
-}
-
-void SelectBank(byte cartType, byte bank)
-{
-    if (cartType >= 5)
-    {                            // MBC2 and above
-        WriteByte(0x2100, bank); // Set ROM bank
-    }
-    else
+    uint16_t bytesRead = 0;
+    while (bytesRead < length)
     {
-        WriteByte(0x6000, 0);
-        WriteByte(0x4000, bank >> 5);
-        WriteByte(0x2000, bank & 0x1F);
+        uint16_t bytesToRead = min(BUFFER_SIZE, length - bytesRead);
+        Cart.ReadRange(address + bytesRead, serialBuffer, bytesToRead);
+        Serial.write(serialBuffer, bytesToRead);
+        bytesRead += bytesToRead;
     }
 }
 
-int Read(uint16_t startAddress, uint8_t *buffer, uint8_t length)
+void GetROM()
 {
-    for (uint16_t addressOffset = 0; addressOffset < length; addressOffset++)
+    ReadBytesToSerial(0x00,Cart.BankSize);
+    for (byte bank = 1; bank < Cart.RomBanks; bank++)
     {
-        buffer[addressOffset] = ReadByte(startAddress + addressOffset);
+        Cart.SelectBank(Cart.CartridgeTypeCode, bank);
+        ReadBytesToSerial(0x4000, Cart.BankSize);
     }
-    return length;
 }
 
+void GetRAM()
+{
+    if (Cart.RamBankSize == 0)
+    {
+        return;
+    }
+    Cart.EnableRAM();
+    for (byte bank = 0; bank < Cart.RamBanks; bank++)
+    {
+        Cart.WriteByte(0x4000, bank);
+        ReadBytesToSerial(0xA000, Cart.RamBankSize);
+    }
+    Cart.DisableRAM();
+}
+/*
+
+
+    void WriteRAM()
+    {
+        if (RamBankSize == 0)
+        {
+            return;
+        }
+        EnableRAM();
+
+        for (byte currentBank = 0; currentBank < RamBanks; currentBank++)
+        {
+            WriteByte(0x4000, currentBank);
+            byte bankData[bytes(currentBank * RamBankSize)];
+            // Initialize bankData as needed
+            WriteBytes(0xA000, bankData, true);
+        }
+        DisableRAM();
+    }
+
+*/
 void loop()
 {
     GetSerialCommand();
-    if (CurrentCommand.write & 4){
-        digitalWrite(CART_RESET, LOW);
-        delayMicroseconds(10);
-        digitalWrite(CART_RESET, HIGH);
-        SetCurrentAddress(0);
-        digitalWrite(CART_CHIP_SELECT, HIGH);
-        digitalWrite(CART_WRITE_ENABLE, HIGH);
-        digitalWrite(CART_READ_ENABLE, HIGH);
-    }
+    switch (CurrentCommand.command)
+    {
+    case CommandType::Reset:
+        Cart.Reset();
+        break;
+    case CommandType::SelectBank:
+        Cart.SelectBank(serialBuffer[0], serialBuffer[1]);
+        break;
 
-    if (CurrentCommand.write == 0)
-    {
-        Read(CurrentCommand.address, serialBuffer, CurrentCommand.length);
+    case CommandType::ReadByte:
+        CurrentCommand.length = 1; // fall through to Read Range
+    case CommandType::ReadRange:
+        Cart.ReadRange(CurrentCommand.address, serialBuffer, CurrentCommand.length);
         Serial.write(serialBuffer, CurrentCommand.length);
-    }
-    
-    if (CurrentCommand.write & 8)
-    {
-        SelectBank(CurrentCommand.data[0], CurrentCommand.data[1]);
-    }
-    
-    if (CurrentCommand.write & 2)
-    {
-        for (int i = 0; i < CurrentCommand.length; i++)
+        break;
+
+    case CommandType::WriteByte:
+        CurrentCommand.length = 1; // fall through to Write Range
+    case CommandType::WriteRange:
+        Cart.WriteRange(CurrentCommand.address, serialBuffer, CurrentCommand.length);
+        Serial.write("Done");
+        break;
+
+    case CommandType::WriteRamByte:
+        CurrentCommand.length = 1; // fall through to Write Ram Range
+    case CommandType::WriteRamRange:
+        Cart.WriteRamRange(CurrentCommand.address, serialBuffer, CurrentCommand.length);
+        Serial.write("Done");
+        break;
+
+    case CommandType::GetHeader:
+        Cart.ReadRange(0x100, serialBuffer, 0x150);
+        Serial.write(serialBuffer, 0x150);
+        break;
+
+    case CommandType::GetTitle:
+        Cart.ReadRange(0x134, serialBuffer, 0x10);
+        Serial.write(serialBuffer, 0x10);
+        break;
+
+    case CommandType::WriteFullRAM:
+        Cart.SelectBank(serialBuffer[0], serialBuffer[1]);
+        for (uint16_t i = 0; i < CurrentCommand.length; i++)
         {
-            WriteRAMByte(CurrentCommand.address + i, CurrentCommand.data[i]);
+            Cart.WriteRAMByte(CurrentCommand.address + i, serialBuffer[i]);
         }
         Serial.write("Done");
-    }else if(CurrentCommand.write & 1)
-    {
-        for (int i = 0; i < CurrentCommand.length; i++)
-        {
-            WriteByte(CurrentCommand.address + i, CurrentCommand.data[i]);
-        }
-        Serial.write("Done");
+        break;
+
+    case CommandType::WriteFullROM:
+    case CommandType::GetFullROM:
+        GetROM();
+        break;
+    case CommandType::GetFullRAM:
+        GetRAM();
+        break;
+    case CommandType::InitializeCart:
+        Cart.init();
+        break;
+    case CommandType::Validate:
+        break;
     }
 }

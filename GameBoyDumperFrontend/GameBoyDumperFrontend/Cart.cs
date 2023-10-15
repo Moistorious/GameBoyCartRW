@@ -1,25 +1,13 @@
 ﻿using GameBoyDumperFrontend.CartClasses;
 using GameBoyDumperFrontend.Interface;
 using System;
-using System.Collections.Generic;
-using System.Data;
-using System.IO.Ports;
-using System.Linq;
-using System.Net;
-using System.Reflection.PortableExecutable;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement.Rebar;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement.TextBox;
 
 namespace GameBoyDumperFrontend
 {
     public class Cart
     {
 
-        const ushort HeaderAddress = 0x100;
         const ushort BankSize = 0x4000;
         public enum CartType
         {
@@ -35,7 +23,6 @@ namespace GameBoyDumperFrontend
         public CartType GbcType;
         public int RamSize;
         public int FullRomSize;
-        public event EventHandler? OnDataProcessed;
 
         ICartridgeCommunication _cartCommunication;
 
@@ -65,8 +52,10 @@ namespace GameBoyDumperFrontend
         public CartHeader GetHeader()
         {
             var headerSize = (UInt16)Marshal.SizeOf(typeof(CartHeader));
-            _headerBytes = new byte[headerSize];
-            ReadRange(HeaderAddress, headerSize, 0, ref _headerBytes);
+            _headerBytes = _cartCommunication.GetHeader();
+
+            //ReadRange(HeaderAddress, headerSize, 0, ref _headerBytes);
+
             return BinarySerialization.FromByteArray<CartHeader>(_headerBytes);
         }
 
@@ -100,8 +89,6 @@ namespace GameBoyDumperFrontend
 
                 _cartCommunication.ReadBytes((ushort)(address + bytesRead), bytesToRead).CopyTo(buffer, bufferOffset);
 
-                OnDataProcessed?.Invoke(this, new CartDataEventArgs() { ProcessedBytes = bytesToRead });
-
                 bytesRead += bytesToRead;
             }
         }
@@ -111,14 +98,15 @@ namespace GameBoyDumperFrontend
 
             //byte[] RomSizeBytes = BitConverter.GetBytes(RomSize);
             byte[] bytes = new byte[FullRomSize];
-            ReadRange(0, BankSize, 0, ref bytes);
+            _cartCommunication.GetROM(bytes);
+            /*ReadRange(0, BankSize, 0, ref bytes);
 
             for (byte bank = 1; bank < RomBanks; bank++)
             {
                 _cartCommunication.SelectBank(Header.CartridgeType, bank);
 
                 ReadRange((ushort)0x4000, BankSize, ((int)BankSize) * bank, ref bytes);
-            }
+            }*/
             return bytes;
         }
 
@@ -132,8 +120,6 @@ namespace GameBoyDumperFrontend
                 byte[] segment = buffer.Skip(bytesWritten).Take(bytesToWrite).ToArray();
 
                 _cartCommunication.WriteBytes((ushort)(address + bytesWritten), segment, RAM);
-
-                OnDataProcessed?.Invoke(this, new CartDataEventArgs() { ProcessedBytes = bytesToWrite });
 
                 bytesWritten += bytesToWrite;
             }
@@ -170,18 +156,14 @@ namespace GameBoyDumperFrontend
             }
 
             byte[] bytes = new byte[RamSize];
-            EnableRAM();
-            for (byte currentBank = 0; currentBank < RamBanks; currentBank++)
-            {
-                _cartCommunication.WriteByte(0x4000, currentBank);
-                ReadRange(0xA000, RamBankSize, RamBankSize * currentBank, ref bytes);
-            }
-            DisableRAM();
+            _cartCommunication.GetRAM(bytes);
+            
             return bytes;
         }
 
         public void init()
         {
+            _cartCommunication.Init();
             RomBanks = 0; RamBanks = 0; RamBankSize = 0; RomBanks = 0;
 
             Header = GetHeader();
@@ -261,11 +243,5 @@ namespace GameBoyDumperFrontend
             }
             return ramBanks;
         }
-
-    }
-
-    class CartDataEventArgs : EventArgs
-    {
-        public uint ProcessedBytes = 0;
     }
 }

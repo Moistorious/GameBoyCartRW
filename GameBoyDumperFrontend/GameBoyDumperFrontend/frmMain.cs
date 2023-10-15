@@ -5,7 +5,7 @@ namespace GameBoyDumperFrontend
 {
     public partial class frmMain : Form
     {
-        Cart cart;
+        Cart? cart;
         CartSerial serial;
         BackgroundWorker worker;
 
@@ -52,7 +52,7 @@ namespace GameBoyDumperFrontend
             var args = e.Argument as workerArgs;
             BackgroundWorker? worker = sender as BackgroundWorker;
 
-            uint totalBytesRead = 0;
+            int totalBytesRead = 0;
             int targetBytes = 0;
 
             if (args == null || worker == null) { throw new ArgumentException("We need an operation to perform!"); }
@@ -61,11 +61,12 @@ namespace GameBoyDumperFrontend
 
             var onDataProcessed = new EventHandler((object? sender, EventArgs e) =>
             {
-                totalBytesRead += ((CartDataEventArgs)e).ProcessedBytes;
+                totalBytesRead += ((CartSerial.CartDataEventArgs)e).ProcessedBytes;
                 worker.ReportProgress((int)Math.Floor(((double)totalBytesRead / targetBytes) * 100));
             });
 
-            cart.OnDataProcessed += onDataProcessed;
+            serial.OnDataWritten += onDataProcessed;
+            serial.OnDataRead += onDataProcessed;
 
             totalBytesRead = 0;
             switch (args.targetOperation)
@@ -86,7 +87,8 @@ namespace GameBoyDumperFrontend
                     File.WriteAllBytes(args.filename, cart.GetROM());
                     break;
             }
-            cart.OnDataProcessed -= onDataProcessed;
+            serial.OnDataWritten -= onDataProcessed;
+            serial.OnDataRead -= onDataProcessed;
         }
 
         private void btn_WriteRam_Click(object sender, EventArgs e)
