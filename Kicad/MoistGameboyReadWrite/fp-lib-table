@@ -1,0 +1,5 @@
+(fp_lib_table
+  (lib (name "digikey-footprints")(type "KiCad")(uri "C:/Users/Tiama/OneDrive/Documents/KiCad/6.0/projects/digikey-kicad-library/digikey-footprints.pretty")(options "")(descr ""))
+  (lib (name "Gameboy Footprints")(type "KiCad")(uri "C:/Users/Tiama/OneDrive/Documents/KiCad/6.0/projects/Game-Boy-KiCad-Library/Footprints")(options "")(descr ""))
+  (lib (name "Project Footprints")(type "KiCad")(uri "${KIPRJMOD}/Footprints")(options "")(descr ""))
+)
