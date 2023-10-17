@@ -136,16 +136,7 @@ namespace GameBoyDumperFrontend
             {
                 return;
             }
-            EnableRAM();
-
-            for (byte currentBank = 0; currentBank < RamBanks; currentBank++)
-            {
-                _cartCommunication.WriteByte(0x4000, currentBank);
-                byte[] bankData = buffer.Skip(currentBank * RamBankSize).Take(RamBankSize).ToArray();
-                WriteBytes(0xA000, bankData, true);
-            }
-            DisableRAM();
-
+            _cartCommunication.WriteRAM(buffer);
         }
 
         public byte[] GetRAM()

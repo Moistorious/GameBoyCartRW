@@ -3,7 +3,8 @@
 #define CART_H
 
 #define CART_TYPE_OFFSET 0x147
-#define RAM_SIZE_OFFSET 0x148
+#define ROM_SIZE_OFFSET 0x148
+#define RAM_SIZE_OFFSET 0x149
 
 #define CART_RESET 2
 // #define CART_AUDIO_IN 3 // bodged out of existance...

@@ -77,7 +77,8 @@ namespace GameBoyDumperFrontend
                 length = (byte)data.Length,
             });
 
-            for (int bytesWriten = 0; bytesWriten < data.Length;){
+            for (int bytesWriten = 0; bytesWriten < data.Length;)
+            {
 
                 byte bytesToWrite = (byte)Math.Min(255, data.Length);
 
@@ -143,7 +144,26 @@ namespace GameBoyDumperFrontend
             }
         }
 
-        private int ReadBytes(byte[] buffer, int offset, int count) 
+        public void WriteRAM(byte[] buffer)
+        {
+            ThrowIfClosed();
+            SendCommand(new SerialCommand
+            {
+                Command = SerialCommand.CommandType.WriteFullRAM
+            });
+
+            for (int bytesWritten = 0; bytesWritten < buffer.Length;)
+            {
+
+                byte bytesToWrite = (byte)Math.Min(255, buffer.Length - bytesWritten);
+
+                _serialPort.Write(buffer, bytesWritten, bytesToWrite);
+                OnDataWritten?.Invoke(this, new CartDataEventArgs() { ProcessedBytes = bytesToWrite });
+                bytesWritten += bytesToWrite;
+            }
+        }
+
+        private int ReadBytes(byte[] buffer, int offset, int count)
         {
             int bytesRead = _serialPort.Read(buffer, offset, _serialPort.BytesToRead);
             OnDataRead?.Invoke(this, new CartDataEventArgs() { ProcessedBytes = bytesRead });

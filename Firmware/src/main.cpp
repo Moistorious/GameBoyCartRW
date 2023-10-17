@@ -6,10 +6,6 @@
 #define BAUD_RATE 115200
 #define BUFFER_SIZE 1024
 // #define DEBUG_ENABLE
-#ifdef DEBUG_ENABLE
-#include <app_api.h>
-#include <avr8-stub.h>
-#endif
 
 uint8_t serialBuffer[BUFFER_SIZE];
 
@@ -20,13 +16,6 @@ CartReader Cart;
 
 void GetSerialCommand()
 {
-
-#ifdef DEBUG_ENABLE
-    CurrentCommand = {
-        CommandType::GetFullROM,
-        0x0000,
-        0x0000};
-#else
     while (Serial.available() <= 0)
     {
     }
@@ -34,7 +23,6 @@ void GetSerialCommand()
     Serial.readBytes((uint8_t *)&CurrentCommand, sizeof(SerialCommand));
 
     Serial.readBytes(serialBuffer, CurrentCommand.length);
-#endif
 }
 
 void setup()
@@ -90,9 +78,22 @@ void ReadBytesToSerial(uint16_t address, uint16_t length)
     }
 }
 
+void WriteRamBytesFromSerial(uint16_t address, uint16_t length)
+{
+    uint16_t bytesRead = 0;
+    while (bytesRead < length)
+    {
+        uint16_t bytesToRead = min(BUFFER_SIZE, length - bytesRead);
+
+        Serial.readBytes(serialBuffer, bytesToRead);
+
+        Cart.WriteRamRange(address + bytesRead, serialBuffer, bytesToRead);
+        bytesRead += bytesToRead;
+    }
+}
 void GetROM()
 {
-    ReadBytesToSerial(0x00,Cart.BankSize);
+    ReadBytesToSerial(0x00, Cart.BankSize);
     for (byte bank = 1; bank < Cart.RomBanks; bank++)
     {
         Cart.SelectBank(Cart.CartridgeTypeCode, bank);
@@ -111,6 +112,21 @@ void GetRAM()
     {
         Cart.WriteByte(0x4000, bank);
         ReadBytesToSerial(0xA000, Cart.RamBankSize);
+    }
+    Cart.DisableRAM();
+}
+
+void WriteRAM()
+{
+    if (Cart.RamBankSize == 0)
+    {
+        return;
+    }
+    Cart.EnableRAM();
+    for (byte bank = 0; bank < Cart.RamBanks; bank++)
+    {
+        Cart.WriteByte(0x4000, bank);
+        WriteRamBytesFromSerial(0xA000, Cart.RamBankSize);
     }
     Cart.DisableRAM();
 }
@@ -136,14 +152,17 @@ void GetRAM()
     }
 
 */
+bool Sanity = true;
 void loop()
 {
     GetSerialCommand();
+
     switch (CurrentCommand.command)
     {
     case CommandType::Reset:
         Cart.Reset();
         break;
+
     case CommandType::SelectBank:
         Cart.SelectBank(serialBuffer[0], serialBuffer[1]);
         break;
@@ -180,15 +199,11 @@ void loop()
         break;
 
     case CommandType::WriteFullRAM:
-        Cart.SelectBank(serialBuffer[0], serialBuffer[1]);
-        for (uint16_t i = 0; i < CurrentCommand.length; i++)
-        {
-            Cart.WriteRAMByte(CurrentCommand.address + i, serialBuffer[i]);
-        }
-        Serial.write("Done");
+        WriteRAM();
         break;
 
     case CommandType::WriteFullROM:
+        break;
     case CommandType::GetFullROM:
         GetROM();
         break;
@@ -197,6 +212,7 @@ void loop()
         break;
     case CommandType::InitializeCart:
         Cart.init();
+        //        Sanity = Cart.SanityCheck();
         break;
     case CommandType::Validate:
         break;

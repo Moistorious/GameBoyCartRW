@@ -14,5 +14,6 @@ namespace GameBoyDumperFrontend.Interface
         void GetROM(byte[] buffer);
         void Init();
         void GetRAM(byte[] buffer);
+        void WriteRAM(byte[] buffer);
     }
 }
