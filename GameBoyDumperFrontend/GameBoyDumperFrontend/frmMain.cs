@@ -27,7 +27,9 @@ namespace GameBoyDumperFrontend
 
         private void Worker_RunWorkerCompleted(object? sender, RunWorkerCompletedEventArgs e)
         {
-            cart.Reset();
+
+            //MessageBox.Show("reset", "ERROR", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            //cart.Reset();
             if (e.Error != null)
             {
                 MessageBox.Show(e.Error.Message, "ERROR", MessageBoxButtons.OK, MessageBoxIcon.Error);

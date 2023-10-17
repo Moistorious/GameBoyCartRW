@@ -162,7 +162,7 @@ void CartReader::Reset()
 void CartReader::EnableRAM()
 {
     ReadByte(0x134); // Hack? needed?
-    if (this->CartridgeTypeCode <= 4)
+    if (CartridgeTypeCode <= 4)
     {
         WriteByte(0x6000, 1); // RAM mode
     }

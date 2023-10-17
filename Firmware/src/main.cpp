@@ -16,9 +16,7 @@ CartReader Cart;
 
 void GetSerialCommand()
 {
-    while (Serial.available() <= 0)
-    {
-    }
+    while (Serial.available() <= 0){}
 
     Serial.readBytes((uint8_t *)&CurrentCommand, sizeof(SerialCommand));
 
@@ -80,15 +78,17 @@ void ReadBytesToSerial(uint16_t address, uint16_t length)
 
 void WriteRamBytesFromSerial(uint16_t address, uint16_t length)
 {
-    uint16_t bytesRead = 0;
-    while (bytesRead < length)
+    uint16_t bytesWritten = 0;
+    byte bytesToWrite = 0;
+    
+    while (bytesWritten < length)
     {
-        uint16_t bytesToRead = min(BUFFER_SIZE, length - bytesRead);
+        bytesToWrite = min(255, length - bytesWritten); // How many bytes to we want?
+        Serial.write(bytesToWrite);// Request the bytes
+        Serial.readBytes(serialBuffer, bytesToWrite);// Read the bytes
+        Cart.WriteRamRange(address + bytesWritten, serialBuffer, bytesToWrite);// Write to ram
 
-        Serial.readBytes(serialBuffer, bytesToRead);
-
-        Cart.WriteRamRange(address + bytesRead, serialBuffer, bytesToRead);
-        bytesRead += bytesToRead;
+        bytesWritten += bytesToWrite;
     }
 }
 void GetROM()
@@ -130,28 +130,7 @@ void WriteRAM()
     }
     Cart.DisableRAM();
 }
-/*
 
-
-    void WriteRAM()
-    {
-        if (RamBankSize == 0)
-        {
-            return;
-        }
-        EnableRAM();
-
-        for (byte currentBank = 0; currentBank < RamBanks; currentBank++)
-        {
-            WriteByte(0x4000, currentBank);
-            byte bankData[bytes(currentBank * RamBankSize)];
-            // Initialize bankData as needed
-            WriteBytes(0xA000, bankData, true);
-        }
-        DisableRAM();
-    }
-
-*/
 bool Sanity = true;
 void loop()
 {
@@ -199,7 +178,9 @@ void loop()
         break;
 
     case CommandType::WriteFullRAM:
+        //Cart.SetCurrentAddress(Cart.RamBankSize);
         WriteRAM();
+        Serial.write("Done");
         break;
 
     case CommandType::WriteFullROM:

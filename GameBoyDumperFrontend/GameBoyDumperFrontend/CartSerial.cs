@@ -152,14 +152,22 @@ namespace GameBoyDumperFrontend
                 Command = SerialCommand.CommandType.WriteFullRAM
             });
 
+            int totalBytesRead = 0;
+            
             for (int bytesWritten = 0; bytesWritten < buffer.Length;)
             {
-
-                byte bytesToWrite = (byte)Math.Min(255, buffer.Length - bytesWritten);
-
+                // We'll allow the reader to request bytes, because otherwise we will overflow its receive buffer.
+                byte bytesToWrite = (byte)_serialPort.ReadByte();
                 _serialPort.Write(buffer, bytesWritten, bytesToWrite);
                 OnDataWritten?.Invoke(this, new CartDataEventArgs() { ProcessedBytes = bytesToWrite });
                 bytesWritten += bytesToWrite;
+            }
+            totalBytesRead = 0;
+
+            // Reader sends "DONE" when finished.
+            while (totalBytesRead < 4)
+            {
+                totalBytesRead += ReadBytes(buffer, totalBytesRead, _serialPort.BytesToRead);
             }
         }
 
